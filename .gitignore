@@ -1,0 +1,45 @@
+# Datos: la carpeta de datos NO se sube (regla del curso, ver CLAUDE.md)
+Datos/**
+!Datos/**/.gitkeep
+
+# Por si se generan datos sueltos fuera de Datos/
+*.csv
+*.tsv
+*.xlsx
+*.xls
+*.parquet
+*.pkl
+*.h5
+*.hdf5
+
+# Entornos y cachés de Python
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Notebooks: salidas (si algún .ipynb se cuela, evita comparar outputs pesados)
+*.ipynb_checkpoints
+
+# Modelos entrenados / checkpoints (PyTorch)
+*.pt
+*.pth
+*.ckpt
+
+# Credenciales y secretos
+*.pem
+*.key
+.env
+.env.*
+
+# Herramientas del curso (no forman parte de la entrega)
+graphify-out/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
