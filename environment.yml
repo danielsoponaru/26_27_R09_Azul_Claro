@@ -1,0 +1,25 @@
+# Entorno del proyecto Reto 09 (Azul Claro).
+# Crear:    conda env create -f environment.yml
+# Activar:  conda activate reto09
+# Actualizar tras cambios en este fichero:
+#           conda env update -f environment.yml --prune
+name: reto09
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  # Datos y cálculo
+  - pandas
+  - numpy
+  # Gráficos
+  - matplotlib
+  # Series temporales (descomposición, test ADF)
+  - statsmodels
+  # Descarga de datos de Yahoo Finance
+  - yfinance
+  # Notebooks
+  - jupyter
+  - ipykernel
+  - nbconvert
+# Cuando se implementen Montecarlo, volatilidad o redes neuronales, añadir aquí
+# lo que haga falta (por ejemplo scipy, arch, pytorch, plotly).
