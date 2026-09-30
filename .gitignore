@@ -66,3 +66,8 @@ graphify-out/
 .idea/
 .DS_Store
 Thumbs.db
+
+# ============================================
+# Resultados generados por los scripts (no se suben)
+# ============================================
+outputs/
