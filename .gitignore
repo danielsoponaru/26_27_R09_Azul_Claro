@@ -70,4 +70,11 @@ Thumbs.db
 # ============================================
 # Resultados generados por los scripts (no se suben)
 # ============================================
-outputs/
+outputs/*
+!outputs/parametros_montecarlo.json
+
+# ============================================
+# Archivos Markdown (no se suben)
+# ============================================
+**/*.md
+!**/README.md
