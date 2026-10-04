@@ -71,3 +71,9 @@ Thumbs.db
 # Resultados generados por los scripts (no se suben)
 # ============================================
 outputs/
+
+# ============================================
+# Archivos Markdown (no se suben)
+# ============================================
+**/*.md
+!**/README.md

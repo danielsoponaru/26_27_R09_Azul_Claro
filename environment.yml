@@ -13,6 +13,10 @@ dependencies:
   - numpy
   # Gráficos
   - matplotlib
+  - seaborn
+  - plotly
+  # Exportar figuras de plotly a PNG (necesita Chrome o Chromium instalado)
+  - python-kaleido
   # Series temporales (descomposición, test ADF)
   - statsmodels
   # Descarga de datos de Yahoo Finance
@@ -22,4 +26,4 @@ dependencies:
   - ipykernel
   - nbconvert
 # Cuando se implementen Montecarlo, volatilidad o redes neuronales, añadir aquí
-# lo que haga falta (por ejemplo scipy, arch, pytorch, plotly).
+# lo que haga falta (por ejemplo scipy, arch, pytorch).
