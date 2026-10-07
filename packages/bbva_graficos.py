@@ -1,4 +1,8 @@
-"""Configuración global de gráficos (paleta BBVA) para los notebooks.
+"""Estilo común de los gráficos del Reto 09 (paleta BBVA): configuración, formato en español y guardado.
+
+Ruta en el repositorio: packages/bbva_graficos.py
+Entrada: ninguna (no lee datos; solo da formato a los gráficos de los notebooks).
+Salida: los gráficos se guardan en PNG en Graficos/.
 
 Uso en el notebook (primera celda):
 
@@ -6,31 +10,59 @@ Uso en el notebook (primera celda):
         configurar_graficos, guardar_mpl, guardar_plotly, fmt_es, BBVA, PALETA
     )
     configurar_graficos()
+
+Contenido:
+    BBVA, PALETA          colores de la paleta y orden de uso cuando hay varias series
+    CMAP_SECUENCIAL       escala continua para magnitudes (de gris a azul principal)
+    CMAP_DIVERGENTE       escala centrada en 0 para correlaciones (marino - blanco - agua)
+    MESES                 abreviaturas de los meses en español
+    configurar_graficos   aplica el estilo a matplotlib, seaborn y plotly y crea Graficos/
+    fmt_es                número en formato español para textos y anotaciones (1.234,5)
+    numeros_es            números de un eje de matplotlib en formato español
+    fechas_es             fechas del eje X como "mar 2025"
+    anotar_fuente         escribe la fuente de los datos bajo el gráfico
+    guardar_mpl           guarda una figura de matplotlib o seaborn en Graficos/
+    guardar_plotly        guarda una figura de plotly en Graficos/ (necesita kaleido)
+
+Por qué un módulo: si cada notebook define sus colores y tamaños, cada gráfico sale distinto.
+Con la configuración en un único sitio, un cambio de estilo se hace aquí y llega a todos.
 """
 from pathlib import Path
 
 import matplotlib as mpl
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.io as pio
 import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.ticker import ScalarFormatter
 
 # --- Paleta BBVA ---
 BBVA = {
-    "principal": "#004481",
-    "marino": "#070E46",
+    "principal": "#004481",   # serie única o línea destacada
+    "marino": "#070E46",      # texto, títulos y ejes
     "medio": "#1973B8",
     "cielo": "#5BBEFF",
-    "agua": "#2DCCCD",
-    "gris": "#F4F4F4",
-    "gris_dato": "#B8BEC6",
-    "blanco": "#FFFFFF",
+    "agua": "#2DCCCD",        # acento y variaciones positivas
+    "gris": "#F4F4F4",        # fondos y zonas de apoyo (casi blanco: no sirve para líneas)
+    "gris_dato": "#B8BEC6",   # lo que no se resalta, líneas de referencia y categoría "Otros"
+    "blanco": "#FFFFFF",      # fondo
 }
+# Orden de uso cuando hay varias series
 PALETA = [BBVA["principal"], BBVA["medio"], BBVA["cielo"], BBVA["agua"], BBVA["marino"]]
+
+# Escalas continuas: secuencial para magnitudes y divergente (centrada en 0) para correlaciones
+CMAP_SECUENCIAL = LinearSegmentedColormap.from_list("bbva_secuencial", [BBVA["gris"], BBVA["principal"]])
+CMAP_DIVERGENTE = LinearSegmentedColormap.from_list(
+    "bbva_divergente", [BBVA["marino"], BBVA["blanco"], BBVA["agua"]])
+
+MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
 CARPETA_GRAFICOS = Path("Graficos")
 
 
+# --- Configuración ---
 def configurar_graficos(carpeta="Graficos"):
     """Aplica el estilo BBVA a matplotlib, seaborn y plotly y crea la carpeta de salida."""
     global CARPETA_GRAFICOS
@@ -87,12 +119,47 @@ def configurar_graficos(carpeta="Graficos"):
     return CARPETA_GRAFICOS
 
 
+# --- Formato en español ---
 def fmt_es(valor, decimales=0):
     """1234567.8 -> '1.234.568' (miles con punto, decimales con coma)."""
     texto = f"{valor:,.{decimales}f}"
     return texto.replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+class _NumerosEs(ScalarFormatter):
+    """El formato por defecto de matplotlib (mismos decimales en cada marca), con los números en español."""
+
+    def __call__(self, x, pos=None):
+        texto = super().__call__(x, pos)
+        decimales = len(texto.split(".")[1]) if "." in texto else 0
+        return fmt_es(x, decimales).replace("-", "\N{MINUS SIGN}")
+
+
+def numeros_es(eje):
+    """Números de un eje (`ax.yaxis` o `ax.xaxis`) en formato español.
+
+    No se fija el número de decimales a mano: con dos decimales fijos, una marca en 0,025
+    saldría como 0,03 y el eje mentiría. Se usan los que matplotlib calcula para cada eje.
+    """
+    formato = _NumerosEs(useOffset=False)
+    formato.set_scientific(False)
+    eje.set_major_formatter(formato)
+
+
+def fechas_es(ax):
+    """Fechas del eje X como `mar 2025`, sin depender del idioma del sistema operativo."""
+    def etiqueta(x, _):
+        fecha = mdates.num2date(x)
+        return f"{MESES[fecha.month - 1]} {fecha.year}"
+    ax.xaxis.set_major_formatter(etiqueta)
+
+
+def anotar_fuente(fig, texto):
+    """Escribe la fuente de los datos bajo el gráfico. Se llama después de `plt.tight_layout()`."""
+    fig.text(0.01, -0.01, f"Fuente: {texto}", ha="left", va="top", alpha=0.75)
+
+
+# --- Guardado ---
 def guardar_mpl(fig, nombre):
     """Guarda una figura de matplotlib/seaborn como PNG en la carpeta de gráficos."""
     CARPETA_GRAFICOS.mkdir(exist_ok=True)
