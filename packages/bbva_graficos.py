@@ -21,12 +21,16 @@ Contenido:
     numeros_es            números de un eje de matplotlib en formato español
     fechas_es             fechas del eje X como "mar 2025"
     anotar_fuente         escribe la fuente de los datos bajo el gráfico
+    texto_es              números de un texto en formato español (1.234,5 y 12,5 %)
+    formato_es            figura entera en formato español y, opcionalmente, su fuente debajo
+    imprimir              print() con los números en formato español
     guardar_mpl           guarda una figura de matplotlib o seaborn en Graficos/
     guardar_plotly        guarda una figura de plotly en Graficos/ (necesita kaleido)
 
 Por qué un módulo: si cada notebook define sus colores y tamaños, cada gráfico sale distinto.
 Con la configuración en un único sitio, un cambio de estilo se hace aquí y llega a todos.
 """
+import re
 from pathlib import Path
 
 import matplotlib as mpl
@@ -36,7 +40,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import seaborn as sns
 from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.ticker import ScalarFormatter
+from matplotlib.ticker import FuncFormatter, PercentFormatter, ScalarFormatter
 
 # --- Paleta BBVA ---
 BBVA = {
@@ -157,6 +161,45 @@ def fechas_es(ax):
 def anotar_fuente(fig, texto):
     """Escribe la fuente de los datos bajo el gráfico. Se llama después de `plt.tight_layout()`."""
     fig.text(0.01, -0.01, f"Fuente: {texto}", ha="left", va="top", alpha=0.75)
+
+
+def texto_es(texto):
+    """Números de un texto en formato español: '1,234.5' -> '1.234,5' y '12.5%' -> '12,5 %'."""
+    texto = re.sub(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+",
+                   lambda m: m.group(0).replace(",", "\0").replace(".", ",").replace("\0", "."), texto)
+    return re.sub(r"(?<=\d)%", " %", texto)
+
+
+def formato_es(fig, fuente=None):
+    """Pasa una figura entera al formato español: ejes numéricos y de porcentaje, etiquetas y textos.
+
+    Con `fuente` escribe además "Fuente: ..." debajo de todo lo que ocupa la figura (leyendas y
+    etiquetas fuera de los ejes incluidas), para que no se solape. Llamar justo antes de guardar_mpl().
+    """
+    for ax in fig.axes:
+        for eje in (ax.xaxis, ax.yaxis):
+            formato = eje.get_major_formatter()
+            if isinstance(formato, PercentFormatter):
+                eje.set_major_formatter(FuncFormatter(lambda v, pos, f=formato: texto_es(f(v, pos))))
+            elif isinstance(formato, ScalarFormatter) and not isinstance(formato, _NumerosEs):
+                numeros_es(eje)
+    for texto in fig.findobj(mpl.text.Text):
+        original = texto.get_text()
+        nuevo = texto_es(original)
+        if nuevo != original:
+            texto.set_text(nuevo)
+    if fuente:
+        fig.canvas.draw()
+        caja = fig.get_tightbbox(fig.canvas.get_renderer())      # en pulgadas
+        ancho, alto = fig.get_size_inches()
+        fig.text(caja.x0 / ancho, (caja.y0 - 0.08) / alto, f"Fuente: {fuente}", ha="left", va="top",
+                 fontsize=11, color=BBVA["marino"])
+    return fig
+
+
+def imprimir(*valores, sep=" ", end="\n"):
+    """Como print(), pero con los números en formato español (tablas incluidas)."""
+    print(texto_es(sep.join(str(v) for v in valores)), end=end)
 
 
 # --- Guardado ---
