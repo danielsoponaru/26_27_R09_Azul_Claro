@@ -22,12 +22,25 @@ Modelos de referencia (payoff al vencimiento, con los 60 retornos aplanados como
       no puede capturar es el max(·, 0) y la exponencial.
     - MLP [64, 32] con ReLU (PyTorch): ve los mismos 60 retornos que la red recurrente, pero sin
       estructura temporal ni canal de tiempo. Responde a la pregunta de si hace falta la recurrencia
-      o basta con una red densa. Si el MLP iguala a las recurrentes en el paso 20, la recurrencia no
-      se justifica por el payoff al vencimiento sino por la prima en cada fecha: la red recurrente da
-      una predicción en cada paso con lo observado hasta entonces, y el MLP necesita la trayectoria
-      completa.
+      o basta con una red densa.
     Todas las predicciones de regresión, también las de las referencias, se recortan a >= 0 (la prima
     no puede ser negativa), para que la comparación sea justa.
+
+Por qué el MLP y la regresión logística van tan bien en el paso 20
+    Con S0 = 1, la media geométrica de cada activo cumple
+        log G_i = (1/20) · Σ_j log S_ij = Σ_k (21 - k)/20 · r_ik,
+    con r_ik el retorno logarítmico del activo i en el paso k: cada retorno entra en todos los precios
+    posteriores, así que los primeros pesan más. El payoff, max(Σ_i exp(log G_i) - 3, 0), es por tanto
+    una función exacta de tres combinaciones lineales de los 60 retornos. Una red densa solo tiene que
+    aprender esas tres combinaciones, la exponencial y el max(·, 0). Y la frontera de ejercicio
+    (Σ_i G_i = 3) es casi lineal en los retornos: cerca de G_i = 1, G_i ≈ 1 + log G_i, así que la
+    frontera es aproximadamente el hiperplano Σ_i log G_i = 0, que la regresión logística ya separa.
+    Además, comparar en el paso 20 favorece al MLP por diseño: las recurrentes reparten su pérdida
+    entre los 20 pasos para aprender también la prima en cada fecha, mientras que el MLP solo aprende
+    el payoff. Por eso la recurrencia no aporta en el vencimiento: su valor está en la prima en cada
+    fecha, que la red recurrente da paso a paso con lo observado hasta entonces y que el MLP no puede
+    dar sin la trayectoria completa. El texto de la elección lo contrasta con los números de la
+    ejecución.
 
 Redes recurrentes (packages/rnn_modelos.py): RNN simple, LSTM, GRU y LSTM bidireccional, con 1 capa
 de 64 neuronas y el mismo presupuesto de entrenamiento: MSE, lr 1e-3, lotes de 512, como máximo 100
@@ -49,14 +62,22 @@ Métricas
 Cómo se elige (siempre con validación; test solo se usa para informar)
     - Mejor modelo global (las cuatro recurrentes y las referencias): el menor RMSE del payoff en el
       paso 20 en validación. Es una comparación justa para todos, también para la bidireccional: en
-      el paso 20 cualquier modelo ha visto la trayectoria completa. Con el criterio de clase de
-      rendimiento frente a parámetros, si un modelo con menos parámetros queda a menos de un 2 % del
-      mejor RMSE, se prefiere el pequeño.
-    - Mejor causal (RNN simple, LSTM o GRU): la menor pérdida de validación de los 20 pasos. Es la que
-      se usa para la prima en rnn_04_prima.py. Entre causales es una comparación justa: el ruido de
-      las etiquetas intermedias es el mismo para todas, así que la diferencia es el error de la prima
-      en cada t. La bidireccional queda fuera porque en el paso t usaría fechas futuras.
-    - Clasificación: la menor log-loss en validación en el paso 20, con la misma regla del 2 %.
+      el paso 20 cualquier modelo ha visto la trayectoria completa.
+    - Regla de empate (rendimiento frente a parámetros, como en clase): para cada modelo se calcula la
+      diferencia de RMSE con el mejor y su intervalo de confianza del 95 % con un bootstrap pareado
+      (1.000 remuestreos de las mismas trayectorias de validación, semilla 42). Es pareado porque los
+      dos modelos se evalúan sobre las mismas trayectorias: la dificultad que comparten se cancela y
+      el intervalo solo recoge la diferencia entre ellos. Si el intervalo contiene el 0, es un empate
+      y se elige el de menos parámetros.
+    - Mejor causal (RNN simple, LSTM o GRU): la menor pérdida de validación de los 20 pasos, con la
+      misma regla de empate (bootstrap pareado de la pérdida de 20 pasos de cada trayectoria). Es la
+      que se usa para la prima en rnn_04_prima.py. Entre causales es una comparación justa: el ruido
+      de las etiquetas intermedias es el mismo para todas, así que la diferencia es el error de la
+      prima en cada t. Ese ruido también hace que las diferencias de esta pérdida sean pequeñas, y por
+      eso conviene comprobar con el bootstrap si son reales. La bidireccional queda fuera porque en el
+      paso t usaría fechas futuras.
+    - Clasificación: la menor log-loss en validación en el paso 20, con la misma regla de empate
+      (bootstrap pareado de la diferencia de log-loss).
     Las dos elecciones de regresión se explican con los números de la ejecución al final del script
     (se imprimen y se guardan en outputs/rnn_eleccion_arquitectura.json).
 """
@@ -74,8 +95,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import FixedLocator, MaxNLocator, NullLocator, ScalarFormatter
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.metrics import (accuracy_score, confusion_matrix, f1_score, log_loss, mean_absolute_error,
-                             mean_squared_error, r2_score)
+from sklearn.metrics import (accuracy_score, confusion_matrix, f1_score, mean_absolute_error, mean_squared_error,
+                             r2_score)
 from torch import nn
 
 from packages.bbva_graficos import (BBVA, CMAP_SECUENCIAL, configurar_graficos, formato_es, guardar_mpl,
@@ -90,7 +111,7 @@ args = parser.parse_args()
 SEMILLA = 42
 N_MAX = 20_000 if args.rapido else None
 PRESUPUESTO = dict(lr=1e-3, batch=512, max_epocas=20 if args.rapido else 100, paciencia=10, min_delta=1e-6)
-TOLERANCIA = 0.02          # rendimiento frente a parámetros: diferencias menores se resuelven por tamaño
+N_BOOTSTRAP = 1_000        # remuestreos del bootstrap pareado de la regla de empate
 ESTRUCTURAS = {
     "RNN simple": dict(tipo="rnn"),
     "LSTM": dict(tipo="lstm"),
@@ -100,6 +121,7 @@ ESTRUCTURAS = {
 ARCHIVOS = {"RNN simple": "rnn", "LSTM": "lstm", "GRU": "gru", "LSTM bidireccional": "lstm_bidireccional"}
 EN_TEXTO = {"Media de entrenamiento": "la media de entrenamiento", "Regresión lineal": "la regresión lineal",
             "MLP [64, 32]": "el MLP"}
+EN_TEXTO_CLF = {"Clase mayoritaria": "la clase mayoritaria", "Regresión logística": "la regresión logística"}
 
 os.chdir(Path(__file__).resolve().parent)   # rutas relativas a la raíz del repo
 CARPETA_SALIDA = Path("outputs/rapido") if args.rapido else Path("outputs")
@@ -116,14 +138,62 @@ def familia(nombre):
     return {"LSTM bidireccional": "bidireccional"}.get(nombre, "causal" if nombre in ESTRUCTURAS else "referencia")
 
 
-def articulo(nombre):
-    return "el" if nombre.startswith("MLP") else "la"
+def nombrar(nombre):
+    """El nombre con su artículo para los textos: 'la LSTM', 'el MLP', 'la regresión lineal'."""
+    return {**EN_TEXTO, **EN_TEXTO_CLF}.get(nombre, f"la {nombre}")
 
 
-def elegir(tabla, columna, tolerancia):
-    """El menor valor de `columna`; entre los que quedan a menos de `tolerancia` de él, el de menos parámetros."""
-    candidatos = tabla[tabla[columna] <= tabla[columna].min() * (1 + tolerancia)]
-    return candidatos.sort_values(["parametros", columna]).index[0]
+def bootstrap_pareado(perdida_a, perdida_b, raiz):
+    """IC del 95 % de la diferencia de la métrica media (a - b) remuestreando las mismas trayectorias.
+
+    perdida_a, perdida_b: pérdida de cada trayectoria de validación (error cuadrático o log-loss).
+    raiz=True compara RMSE (raíz de la media) en vez de la media. La semilla es la misma en todas las
+    comparaciones, así que todas usan los mismos 1.000 remuestreos.
+    """
+    rng = np.random.default_rng(SEMILLA)
+    diferencias = np.empty(N_BOOTSTRAP)
+    for b in range(N_BOOTSTRAP):
+        i = rng.integers(0, len(perdida_a), len(perdida_a))
+        media_a, media_b = perdida_a[i].mean(), perdida_b[i].mean()
+        diferencias[b] = np.sqrt(media_a) - np.sqrt(media_b) if raiz else media_a - media_b
+    return np.percentile(diferencias, [2.5, 97.5])
+
+
+def elegir(tabla, columna, perdidas_val, raiz):
+    """Devuelve (mejor por `columna`, elegido). Empatan con el mejor los modelos cuya diferencia tiene un
+    IC del 95 % bootstrap que contiene el 0; entre los empatados se elige el de menos parámetros.
+    Añade a la tabla la diferencia con el mejor, su intervalo y si hay empate."""
+    mejor = tabla[columna].idxmin()
+    tabla[["val_dif_vs_mejor", "val_ic95_inf", "val_ic95_sup"]] = np.nan
+    tabla["val_empate_con_mejor"] = False
+    for nombre in tabla.index:
+        inferior, superior = bootstrap_pareado(perdidas_val[nombre], perdidas_val[mejor], raiz)
+        tabla.loc[nombre, "val_dif_vs_mejor"] = tabla.loc[nombre, columna] - tabla.loc[mejor, columna]
+        tabla.loc[nombre, "val_ic95_inf"], tabla.loc[nombre, "val_ic95_sup"] = inferior, superior
+        tabla.loc[nombre, "val_empate_con_mejor"] = bool(inferior <= 0 <= superior)
+    empatados = tabla[tabla["val_empate_con_mejor"]]
+    return mejor, empatados.sort_values(["parametros", columna]).index[0]
+
+
+def frase_eleccion(tabla, columna, mejor, elegido, menor_metrica):
+    """Explica la elección con la diferencia y su intervalo bootstrap. menor_metrica: 'el menor RMSE', etc."""
+    if elegido != mejor:
+        e = tabla.loc[elegido]
+        return (f"{menor_metrica[0].upper()}{menor_metrica[1:]} en validación corresponde a {nombrar(mejor)} "
+                f"({tabla.loc[mejor, columna]:.4f}); "
+                f"{nombrar(elegido)} tiene {e[columna]:.4f}, una diferencia de {e['val_dif_vs_mejor']:+.4f} (IC del "
+                f"95 % por bootstrap pareado: [{e['val_ic95_inf']:+.4f}, {e['val_ic95_sup']:+.4f}]). El intervalo "
+                f"contiene el 0, así que es un empate, y se elige {nombrar(elegido)} por tener menos parámetros "
+                f"({e['parametros']:,.0f} frente a {tabla.loc[mejor, 'parametros']:,.0f}). ")
+    segundo = tabla.drop(mejor).sort_values(columna).index[0]
+    s = tabla.loc[segundo]
+    texto = (f"Tiene {menor_metrica} en validación ({tabla.loc[mejor, columna]:.4f}). Frente al siguiente modelo, "
+             f"{nombrar(segundo)} ({s[columna]:.4f}), la diferencia es de {s['val_dif_vs_mejor']:+.4f} (IC del 95 % "
+             f"por bootstrap pareado: [{s['val_ic95_inf']:+.4f}, {s['val_ic95_sup']:+.4f}]): ")
+    if s["val_empate_con_mejor"]:
+        return texto + (f"el intervalo contiene el 0, es un empate, y {nombrar(mejor)} se mantiene por tener menos "
+                        f"parámetros ({tabla.loc[mejor, 'parametros']:,.0f} frente a {s['parametros']:,.0f}). ")
+    return texto + "el intervalo no contiene el 0, así que no es un empate. "
 
 
 def comparar(valor, referencia):
@@ -154,11 +224,12 @@ plano = {c: datos[f"x_{c}"][..., :3].reshape(len(datos[f"x_{c}"]), -1) for c in 
 imprimir(f"Trayectorias: {len(plano['train']):,} de entrenamiento, {len(plano['val']):,} de validación y "
          f"{len(plano['test']):,} de test")
 
-filas_reg, pred_test_reg, historiales = [], {}, {}
+filas_reg, pred_test_reg, errores_val_reg, perdidas_20_val, historiales = [], {}, {}, {}, {}
 
 
 def fila_regresion(nombre, parametros, pred_val, pred_test, t_pred, t_ent, res=None):
     pred_test_reg[nombre] = pred_test
+    errores_val_reg[nombre] = (pred_val - payoff_c["val"]) ** 2     # para el bootstrap pareado
     return {
         "modelo": nombre, "familia": familia(nombre), "parametros": parametros,
         "epocas": res["epocas"] if res else np.nan, "mejor_epoca": res["mejor_epoca"] if res else np.nan,
@@ -205,6 +276,14 @@ for nombre, config in ESTRUCTURAS.items():
     modelo = RedRecurrente(**config)
     res = entrenar(modelo, datos, nn.MSELoss(), **PRESUPUESTO)
     historiales[nombre] = res["historial"]
+    # Pérdida de los 20 pasos de cada trayectoria de validación (MSE escalado, salida sin recortar), para el
+    # bootstrap de la elección causal. Su media tiene que ser la mejor pérdida de validación del entrenamiento
+    modelo.eval()
+    with torch.no_grad():
+        bruta_val = torch.cat([modelo(torch.as_tensor(datos["x_val"][i:i + 8192]).to(DISPOSITIVO)).cpu()
+                               for i in range(0, len(datos["x_val"]), 8192)]).numpy()
+    perdidas_20_val[nombre] = ((bruta_val - datos["y_val"]) ** 2).mean(axis=1)
+    assert np.isclose(perdidas_20_val[nombre].mean(), res["mejor_val"], rtol=1e-3), "pérdida de 20 pasos incoherente"
     pred_test, t_pred = medir_prediccion(
         lambda x: evaluar(modelo, x, datos["media_y"], datos["desv_y"])[:, -1], datos["x_test"])
     filas_reg.append(fila_regresion(nombre, contar_parametros(modelo),
@@ -218,10 +297,15 @@ tabla_reg = pd.DataFrame(filas_reg).set_index("modelo")
 # ============================ CLASIFICACIÓN ============================
 datos_itm = cargar_datos("itm", N_MAX)
 itm_c = {c: datos_itm[f"y_{c}"][:, -1].astype(int) for c in ("train", "val", "test")}
-filas_clf = []
+filas_clf, perdidas_val_clf = [], {}
 
 
 def fila_clasificacion(nombre, parametros, prob_val, prob_test, t_pred, t_ent, res=None):
+    # Log-loss de cada trayectoria, para el bootstrap. Se recorta con el épsilon del tipo de dato, como
+    # log_loss de scikit-learn: en float32, 1 - 1e-15 redondea a 1 y daría log(0)
+    eps = np.finfo(prob_val.dtype).eps
+    p = np.clip(prob_val, eps, 1 - eps).astype(np.float64)
+    perdidas_val_clf[nombre] = -(itm_c["val"] * np.log(p) + (1 - itm_c["val"]) * np.log(1 - p))
     clase_test = (prob_test >= 0.5).astype(int)
     vn, fp, fn, vp = confusion_matrix(itm_c["test"], clase_test, labels=[0, 1]).ravel()
     return {
@@ -229,7 +313,7 @@ def fila_clasificacion(nombre, parametros, prob_val, prob_test, t_pred, t_ent, r
         "epocas": res["epocas"] if res else np.nan, "mejor_epoca": res["mejor_epoca"] if res else np.nan,
         "tiempo_entrenamiento_s": t_ent, "tiempo_prediccion_us": t_pred,
         "val_perdida_20_pasos": res["mejor_val"] if res else np.nan,
-        "val_logloss_paso20": log_loss(itm_c["val"], prob_val, labels=[0, 1]),
+        "val_logloss_paso20": perdidas_val_clf[nombre].mean(),
         "val_accuracy_paso20": accuracy_score(itm_c["val"], prob_val >= 0.5),
         "test_accuracy": accuracy_score(itm_c["test"], clase_test),
         "test_f1": f1_score(itm_c["test"], clase_test, zero_division=0),
@@ -266,59 +350,83 @@ for nombre, config in ESTRUCTURAS.items():
 tabla_clf = pd.DataFrame(filas_clf).set_index("modelo")
 
 # =============================== ELECCIÓN ===============================
-mejor_global = elegir(tabla_reg, "val_rmse_paso20", TOLERANCIA)
-causales = tabla_reg[tabla_reg["familia"] == "causal"].sort_values("val_perdida_20_pasos")
-mejor_causal = causales.index[0]
-mejor_clf = elegir(tabla_clf, "val_logloss_paso20", TOLERANCIA)
+COLUMNAS_EMPATE = ["val_dif_vs_mejor", "val_ic95_inf", "val_ic95_sup", "val_empate_con_mejor"]
+mejor_reg, mejor_global = elegir(tabla_reg, "val_rmse_paso20", errores_val_reg, raiz=True)
+causales = tabla_reg[tabla_reg["familia"] == "causal"].copy()
+mejor_causal_val, mejor_causal = elegir(causales, "val_perdida_20_pasos", perdidas_20_val, raiz=False)
+tabla_reg = tabla_reg.join(causales[COLUMNAS_EMPATE].add_prefix("causal_"))
+mejor_clf_val, mejor_clf = elegir(tabla_clf, "val_logloss_paso20", perdidas_val_clf, raiz=False)
 causales_clf = tabla_clf[tabla_clf["familia"] == "causal"].sort_values("val_perdida_20_pasos")
 mejor_causal_clf = causales_clf.index[0]
 
 g = tabla_reg.loc[mejor_global]
-orden = tabla_reg.sort_values("val_rmse_paso20")
-texto_global = (f"Mejor modelo global: {articulo(mejor_global)} {mejor_global}, por el RMSE del payoff en el paso 20 "
-                f"en validación ({g['val_rmse_paso20']:.4f}). ")
-if orden.index[0] != mejor_global:
-    m = orden.iloc[0]
-    texto_global += (f"{articulo(orden.index[0]).capitalize()} {orden.index[0]} tenía un RMSE algo menor "
-                     f"({m['val_rmse_paso20']:.4f}, un {1 - m['val_rmse_paso20'] / g['val_rmse_paso20']:.1%} "
-                     f"menos) pero con {m['parametros']:,.0f} parámetros frente a {g['parametros']:,.0f}: con "
-                     f"menos de un {TOLERANCIA:.0%} de diferencia se prefiere el modelo más pequeño. ")
-else:
-    texto_global += (f"Le sigue {articulo(orden.index[1])} {orden.index[1]} ({orden.iloc[1]['val_rmse_paso20']:.4f}). ")
+texto_global = (f"Mejor modelo global: {nombrar(mejor_global)}, elegido por el RMSE del payoff en el paso 20 en "
+                f"validación. " + frase_eleccion(tabla_reg, "val_rmse_paso20", mejor_reg, mejor_global,
+                                                 "el menor RMSE"))
 ref = tabla_reg["val_rmse_paso20"]
 texto_global += "Su error es " + " y ".join(
     f"{comparar(g['val_rmse_paso20'], ref[r])} que el de {EN_TEXTO[r]} ({ref[r]:.4f})"
     for r in EN_TEXTO if r != mejor_global) + ". "
 texto_global += (f"En test, que no se ha usado para elegir, da un RMSE de {g['test_rmse']:.4f} y un R² de "
                  f"{g['test_r2']:.4f}.")
-if g["familia"] == "referencia":
-    mejor_rec = tabla_reg[tabla_reg["familia"] != "referencia"].sort_values("val_rmse_paso20").index[0]
-    r_rec = tabla_reg.loc[mejor_rec, "val_rmse_paso20"]
-    texto_global += (f" La mejor recurrente en el paso 20 es la {mejor_rec} ({r_rec:.4f}, un error "
-                     f"{comparar(r_rec, g['val_rmse_paso20'])}). Para el payoff al vencimiento, la "
-                     f"recurrencia no aporta una mejora apreciable frente a una red densa que ve los mismos 60 "
-                     f"retornos. Lo que justifica la red recurrente es la prima en cada fecha: da una predicción en "
-                     f"cada paso con lo observado hasta entonces, mientras que {EN_TEXTO.get(mejor_global, mejor_global)}"
-                     f" necesita la trayectoria completa.")
 if g["familia"] == "bidireccional":
     texto_global += (" Al ser bidireccional, solo vale para el payoff al vencimiento, cuando la trayectoria "
                      "completa ya se conoce; para la prima en t se usa la mejor causal.")
 
-c = tabla_reg.loc[mejor_causal]
-otras = ", ".join(f"{fila['val_perdida_20_pasos']:.4f} de la {n}" for n, fila in causales.iloc[1:].iterrows())
-texto_causal = (f"Mejor causal, la que se usa para la prima en cada fecha: la {mejor_causal}, con la menor pérdida "
-                f"de validación en los 20 pasos ({c['val_perdida_20_pasos']:.4f}, frente a {otras}). Entre causales "
-                f"el ruido de las etiquetas intermedias es el mismo, así que la diferencia mide el error de la prima "
-                f"en cada t. Tiene {c['parametros']:,.0f} parámetros, se entrenó en {c['tiempo_entrenamiento_s']:.0f} s "
+# Por qué el MLP va tan bien en el vencimiento, contrastado con la mejor recurrente
+mejor_rec = tabla_reg[tabla_reg["familia"] != "referencia"]["val_rmse_paso20"].idxmin()
+dif_rec = ref[mejor_rec] - ref["MLP [64, 32]"]
+ic_rec = bootstrap_pareado(errores_val_reg[mejor_rec], errores_val_reg["MLP [64, 32]"], raiz=True)
+texto_global += (f" El MLP va tan bien en el vencimiento porque, con S0 = 1, log G_i = suma_k (21 - k)/20 · r_ik: "
+                 f"el payoff, max(suma_i exp(log G_i) - 3, 0), es una función exacta de tres combinaciones lineales "
+                 f"de los 60 retornos. La mejor recurrente, {nombrar(mejor_rec)} ({ref[mejor_rec]:.4f}), frente al MLP "
+                 f"({ref['MLP [64, 32]']:.4f}): diferencia de {dif_rec:+.4f} (IC del 95 % por bootstrap pareado: "
+                 f"[{ic_rec[0]:+.4f}, {ic_rec[1]:+.4f}]). Además, comparar en el paso 20 favorece al MLP por diseño: "
+                 f"las recurrentes reparten su pérdida entre los 20 pasos para aprender también la prima en cada "
+                 f"fecha, mientras que el MLP solo aprende el payoff. ")
+if ic_rec[1] >= 0:
+    texto_global += ("La recurrencia no aporta en el vencimiento; su valor está en la prima en cada fecha, que la red "
+                     "recurrente da paso a paso con lo observado hasta entonces y que el MLP no puede dar sin la "
+                     "trayectoria completa.")
+else:
+    texto_global += ("En esta ejecución la recurrente sí mejora al MLP de forma significativa en el vencimiento, y "
+                     "además da la prima en cada fecha, que el MLP no puede dar sin la trayectoria completa.")
+
+c = causales.loc[mejor_causal]
+texto_causal = (f"Mejor causal, la que se usa para la prima en cada fecha: {nombrar(mejor_causal)}, elegida por la "
+                f"pérdida de validación en los 20 pasos. "
+                + frase_eleccion(causales, "val_perdida_20_pasos", mejor_causal_val, mejor_causal,
+                                 "la menor pérdida de 20 pasos")
+                + f"Entre causales el ruido de las etiquetas intermedias es el mismo, así que la diferencia mide el "
+                f"error de la prima en cada t. Tiene {c['parametros']:,.0f} parámetros, se entrenó en "
+                f"{c['tiempo_entrenamiento_s']:.0f} s "
                 f"({c['epocas']:.0f} épocas) y su RMSE del payoff en el paso 20 en validación es "
                 f"{c['val_rmse_paso20']:.4f}.")
 
 k = tabla_clf.loc[mejor_clf]
-texto_clf = (f"Clasificación: la mejor por log-loss en el paso 20 en validación es {articulo(mejor_clf)} {mejor_clf} "
-             f"({k['val_logloss_paso20']:.4f}); en test acierta el {k['test_accuracy']:.2%} con un F1 de "
-             f"{k['test_f1']:.4f}, frente al {tabla_clf.loc['Clase mayoritaria', 'test_accuracy']:.2%} de la clase "
-             f"mayoritaria y el {tabla_clf.loc['Regresión logística', 'test_accuracy']:.2%} de la regresión logística. "
-             f"Entre causales, por la pérdida de los 20 pasos, gana la {mejor_causal_clf}")
+log_clf = tabla_clf["val_logloss_paso20"]
+mejor_rec_clf = tabla_clf[tabla_clf["familia"] != "referencia"]["val_logloss_paso20"].idxmin()
+ic_clf = bootstrap_pareado(perdidas_val_clf[mejor_rec_clf], perdidas_val_clf["Regresión logística"], raiz=False)
+lg, rc = tabla_clf.loc["Regresión logística"], tabla_clf.loc[mejor_rec_clf]
+texto_clf = (f"Clasificación: el mejor modelo es {nombrar(mejor_clf)}, elegido por la log-loss en el paso 20 en "
+             f"validación. " + frase_eleccion(tabla_clf, "val_logloss_paso20", mejor_clf_val, mejor_clf,
+                                              "la menor log-loss")
+             + f"En test acierta el {k['test_accuracy']:.2%} con un F1 de {k['test_f1']:.4f}, frente al "
+             f"{tabla_clf.loc['Clase mayoritaria', 'test_accuracy']:.2%} de la clase mayoritaria. "
+             f"La regresión logística ya acierta el {lg['test_accuracy']:.2%} porque la frontera de ejercicio "
+             f"(suma_i G_i = 3) es casi lineal en los retornos: cerca de G_i = 1, G_i es aproximadamente "
+             f"1 + log G_i, y log G_i es lineal en ellos. ")
+if ic_clf[1] < 0:
+    texto_clf += (f"{nombrar(mejor_rec_clf)[0].upper()}{nombrar(mejor_rec_clf)[1:]} recoge la parte no lineal de la "
+                  f"frontera: reduce los errores de test de {lg['test_fp'] + lg['test_fn']:,.0f} a "
+                  f"{rc['test_fp'] + rc['test_fn']:,.0f} y la log-loss de validación en "
+                  f"{log_clf[mejor_rec_clf] - log_clf['Regresión logística']:+.4f} (IC del 95 % por bootstrap pareado: "
+                  f"[{ic_clf[0]:+.4f}, {ic_clf[1]:+.4f}]). ")
+else:
+    texto_clf += (f"{nombrar(mejor_rec_clf)[0].upper()}{nombrar(mejor_rec_clf)[1:]} no la mejora de forma "
+                  f"significativa: diferencia de log-loss de {log_clf[mejor_rec_clf] - log_clf['Regresión logística']:+.4f}"
+                  f" (IC del 95 % por bootstrap pareado: [{ic_clf[0]:+.4f}, {ic_clf[1]:+.4f}]). ")
+texto_clf += f"Entre causales, por la pérdida de los 20 pasos, gana la {mejor_causal_clf}"
 if mejor_causal_clf == mejor_causal:
     texto_clf += ", la misma que en regresión: se puede usar la misma configuración para las dos tareas."
 else:
@@ -334,7 +442,10 @@ with open(CARPETA_SALIDA / "rnn_eleccion_arquitectura.json", "w", encoding="utf-
         "mejor_global": mejor_global, "mejor_causal": mejor_causal,
         "tipo_causal": ESTRUCTURAS[mejor_causal]["tipo"],
         "mejor_clasificacion": mejor_clf, "mejor_causal_clasificacion": mejor_causal_clf,
-        "tolerancia": TOLERANCIA, "rapido": args.rapido,
+        "mejor_global_por_metrica": mejor_reg, "mejor_causal_por_metrica": mejor_causal_val,
+        "mejor_clasificacion_por_metrica": mejor_clf_val,
+        "regla_empate": {"metodo": "bootstrap pareado", "remuestreos": N_BOOTSTRAP, "semilla": SEMILLA, "nivel": 0.95},
+        "rapido": args.rapido,
         "texto_global": texto_es(texto_global), "texto_causal": texto_es(texto_causal),
         "texto_clasificacion": texto_es(texto_clf),
     }, archivo, indent=2, ensure_ascii=False)
@@ -347,6 +458,12 @@ imprimir("\nRegresión del payoff al vencimiento (paso 20):")
 imprimir(tabla_reg[columnas_reg].to_string(float_format=lambda v: f"{v:.4f}"))
 imprimir("\nClasificación (paso 20, umbral 0.5):")
 imprimir(tabla_clf[columnas_clf].to_string(float_format=lambda v: f"{v:.4f}"))
+imprimir(f"\nRegla de empate global (RMSE de validación en el paso 20; referencia: {nombrar(mejor_reg)}):")
+imprimir(tabla_reg[["val_rmse_paso20", "parametros"] + COLUMNAS_EMPATE].to_string(float_format=lambda v: f"{v:+.4f}"))
+imprimir(f"\nRegla de empate causal (pérdida de validación de 20 pasos; referencia: {nombrar(mejor_causal_val)}):")
+imprimir(causales[["val_perdida_20_pasos", "parametros"] + COLUMNAS_EMPATE].to_string(float_format=lambda v: f"{v:+.4f}"))
+imprimir(f"\nRegla de empate en clasificación (log-loss de validación; referencia: {nombrar(mejor_clf_val)}):")
+imprimir(tabla_clf[["val_logloss_paso20", "parametros"] + COLUMNAS_EMPATE].to_string(float_format=lambda v: f"{v:+.4f}"))
 imprimir("\n" + texto_global + "\n\n" + texto_causal + "\n\n" + texto_clf)
 
 # =============================== GRÁFICOS ===============================
@@ -415,7 +532,7 @@ for ax, columna, etiqueta in zip(axes, ["parametros", "tiempo_entrenamiento_s"],
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlabel(etiqueta)
-marcas = [m for m in (0.02, 0.03, 0.05, 0.08, 0.1, 0.15, 0.2, 0.3, 0.5, 0.8)
+marcas = [m for m in (0.005, 0.01, 0.02, 0.03, 0.05, 0.08, 0.1, 0.15, 0.2, 0.3, 0.5, 0.8)
           if tabla_reg["test_rmse"].min() * 0.9 <= m <= tabla_reg["test_rmse"].max() * 1.1]
 axes[0].yaxis.set_major_locator(FixedLocator(marcas))
 axes[0].yaxis.set_major_formatter(ScalarFormatter())
