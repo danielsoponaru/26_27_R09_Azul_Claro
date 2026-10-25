@@ -67,6 +67,11 @@ Parámetros entrenables (contar_parametros)
     RNN h·(x + h + 2), GRU 3·h·(x + h + 2) y LSTM 4·h·(x + h + 2). Con x = 4 y h = 64, la LSTM tiene
     4·64·70 = 17.920 y la Linear(64, 1) 65: 17.985 en total. No dependen de la longitud de la
     secuencia, porque los mismos pesos se reutilizan en cada paso.
+
+Comparación entre modelos (perdidas_20_pasos y bootstrap_pareado)
+    Para decidir si la diferencia de pérdida entre dos modelos es real o un empate, se calcula la
+    pérdida de cada trayectoria de validación y un intervalo del 95 % de la diferencia con un
+    bootstrap pareado. Si el intervalo contiene el 0, es un empate.
 """
 import copy
 import time
@@ -188,6 +193,36 @@ def evaluar(modelo, x, media_y=0.0, desv_y=1.0, clasificacion=False, batch=8192)
     if clasificacion:
         return torch.sigmoid(salida).numpy()
     return np.maximum(salida.numpy() * desv_y + media_y, 0)
+
+
+def salida_bruta(modelo, x, batch=8192):
+    """Salida de la red en la escala de entrenamiento, sin desescalar ni recortar: forma (n, pasos)."""
+    modelo.to(DISPOSITIVO).eval()
+    with torch.no_grad():
+        return torch.cat([modelo(torch.as_tensor(x[i:i + batch]).to(DISPOSITIVO)).cpu()
+                          for i in range(0, len(x), batch)]).numpy()
+
+
+def perdidas_20_pasos(modelo, x, y):
+    """MSE escalado de los 20 pasos de cada trayectoria. Su media es la pérdida de validación de entrenar()."""
+    return ((salida_bruta(modelo, x) - y) ** 2).mean(axis=1)
+
+
+def bootstrap_pareado(perdida_a, perdida_b, raiz=False, n_remuestreos=1000, semilla=42):
+    """IC del 95 % de la diferencia de la pérdida media (a - b) remuestreando las mismas trayectorias.
+
+    Es pareado porque los dos modelos se evalúan sobre las mismas trayectorias: la dificultad que
+    comparten se cancela y el intervalo solo recoge la diferencia entre ellos. raiz=True compara RMSE
+    (raíz de la media del error cuadrático). Con la misma semilla, todas las comparaciones usan los
+    mismos remuestreos.
+    """
+    rng = np.random.default_rng(semilla)
+    diferencias = np.empty(n_remuestreos)
+    for b in range(n_remuestreos):
+        i = rng.integers(0, len(perdida_a), len(perdida_a))
+        media_a, media_b = perdida_a[i].mean(), perdida_b[i].mean()
+        diferencias[b] = np.sqrt(media_a) - np.sqrt(media_b) if raiz else media_a - media_b
+    return np.percentile(diferencias, [2.5, 97.5])
 
 
 if __name__ == "__main__":
