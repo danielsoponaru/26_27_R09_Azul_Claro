@@ -25,8 +25,9 @@ dependencies:
   - jupyter
   - ipykernel
   - nbconvert
-  # Fórmula cerrada de BBVA (scipy) y red neuronal (pytorch; scikit-learn para referencias y métricas)
+  # Fórmula cerrada de BBVA (scipy) y red neuronal (pytorch; scikit-learn para las métricas)
   - scipy
   - scikit-learn
   - pytorch
-# Cuando se implemente la volatilidad (GARCH), añadir aquí arch.
+  # Volatilidad con modelos GARCH (librería arch; en conda-forge se llama arch-py)
+  - arch-py
