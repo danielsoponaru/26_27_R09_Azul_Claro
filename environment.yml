@@ -3,31 +3,39 @@
 # Activar:  conda activate reto09
 # Actualizar tras cambios en este fichero:
 #           conda env update -f environment.yml --prune
+#
+# Las versiones están fijadas a la rama menor (por ejemplo pandas=3.0 admite 3.0.x) para que todos los
+# notebooks se ejecuten igual en cualquier ordenador. Es el conjunto con el que se comprobó que el
+# entorno se resuelve sin conflictos y que cada librería funciona. Python 3.12 porque es la versión
+# para la que están disponibles juntos pytorch, arch-py y el resto.
 name: reto09
 channels:
   - conda-forge
 dependencies:
   - python=3.12
   # Datos y cálculo
-  - pandas
-  - numpy
+  - pandas=3.0
+  - numpy=2.5
+  - scipy=1.18
   # Gráficos
-  - matplotlib
-  - seaborn
-  - plotly
+  - matplotlib=3.11
+  - seaborn=0.13
+  - plotly=6.9
   # Exportar figuras de plotly a PNG (necesita Chrome o Chromium instalado)
-  - python-kaleido
+  - python-kaleido=1.3
   # Series temporales (descomposición, test ADF)
-  - statsmodels
+  - statsmodels=0.15
   # Descarga de datos de Yahoo Finance
-  - yfinance
+  - yfinance=1.7
+  # Red neuronal (pytorch; scikit-learn para las métricas)
+  - pytorch=2.10
+  - scikit-learn=1.9
+  # Volatilidad con modelos GARCH (librería arch; en conda-forge se llama arch-py)
+  - arch-py=8.0
   # Notebooks
   - jupyter
   - ipykernel
   - nbconvert
-  # Fórmula cerrada de BBVA (scipy) y red neuronal (pytorch; scikit-learn para las métricas)
-  - scipy
-  - scikit-learn
-  - pytorch
-  # Volatilidad con modelos GARCH (librería arch; en conda-forge se llama arch-py)
-  - arch-py
+  # display y Markdown de los notebooks 08 y 09 (IPython) y tablas con formato de pandas (.style, necesita jinja2)
+  - ipython
+  - jinja2
