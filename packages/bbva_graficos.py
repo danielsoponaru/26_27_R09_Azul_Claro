@@ -213,28 +213,34 @@ def guardar_mpl(fig, nombre):
     return ruta
 
 
-def cerrar_grafico(fig, nombre, fuente=None):
+def cerrar_grafico(fig, nombre, fuente=None, ajustar_titulos=True, formato_completo=False):
     """Último paso de un gráfico de matplotlib/seaborn: retoques, fuente, guardado y muestra.
 
-    1. Si la figura tiene título general (`fig.suptitle`), lo pone a 16 pt en negrita y baja el de cada
-       panel a 13 pt, porque a 16 pt (el tamaño global) no caben varios paneles en fila.
-    2. Pasa a formato español los ejes numéricos que siguen con el formato por defecto.
+    1. `ajustar_titulos`: si la figura tiene título general (`fig.suptitle`), lo pone a 16 pt en negrita y
+       baja el de cada panel a 13 pt, porque a 16 pt (el tamaño global) no caben varios paneles en fila, y
+       recoloca con `tight_layout()`. Con `False` no toca títulos ni la disposición (por ejemplo, cuando la
+       figura ya se colocó a mano con `subplots_adjust`).
+    2. Pasa a formato español los ejes numéricos que siguen con el formato por defecto. Con
+       `formato_completo=True` usa `formato_es()`, que además traduce porcentajes y textos de la figura.
     3. Si se indica `fuente`, la escribe bajo el gráfico.
     4. Guarda el PNG en Graficos/ y muestra la figura.
     """
-    if fig._suptitle is not None:
+    if ajustar_titulos and fig._suptitle is not None:
         fig._suptitle.set(fontsize=16, fontweight="bold", color=BBVA["marino"])
         for ax in fig.axes:
             for posicion in ("left", "center", "right"):     # los títulos del estilo global van a la izquierda
                 if ax.get_title(loc=posicion):
                     ax.set_title(ax.get_title(loc=posicion), loc=posicion, fontsize=13)
         fig.tight_layout()
-    for ax in fig.axes:
-        for eje in (ax.xaxis, ax.yaxis):
-            if type(eje.get_major_formatter()) is ScalarFormatter:
-                numeros_es(eje)
-    if fuente:
-        anotar_fuente(fig, fuente)
+    if formato_completo:
+        formato_es(fig, fuente=fuente)
+    else:
+        for ax in fig.axes:
+            for eje in (ax.xaxis, ax.yaxis):
+                if type(eje.get_major_formatter()) is ScalarFormatter:
+                    numeros_es(eje)
+        if fuente:
+            anotar_fuente(fig, fuente)
     ruta = guardar_mpl(fig, nombre)
     plt.show()
     return ruta
