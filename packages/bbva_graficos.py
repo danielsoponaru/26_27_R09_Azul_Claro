@@ -25,6 +25,7 @@ Contenido:
     formato_es            figura entera en formato español y, opcionalmente, su fuente debajo
     imprimir              print() con los números en formato español
     guardar_mpl           guarda una figura de matplotlib o seaborn en Graficos/
+    cerrar_grafico        retoques finales, fuente, guardado y muestra de una figura de matplotlib
     guardar_plotly        guarda una figura de plotly en Graficos/ (necesita kaleido)
 
 Por qué un módulo: si cada notebook define sus colores y tamaños, cada gráfico sale distinto.
@@ -209,6 +210,33 @@ def guardar_mpl(fig, nombre):
     ruta = CARPETA_GRAFICOS / f"{nombre}.png"
     fig.savefig(ruta, dpi=200, bbox_inches="tight", facecolor="white")
     print(f"Guardado: {ruta}")
+    return ruta
+
+
+def cerrar_grafico(fig, nombre, fuente=None):
+    """Último paso de un gráfico de matplotlib/seaborn: retoques, fuente, guardado y muestra.
+
+    1. Si la figura tiene título general (`fig.suptitle`), lo pone a 16 pt en negrita y baja el de cada
+       panel a 13 pt, porque a 16 pt (el tamaño global) no caben varios paneles en fila.
+    2. Pasa a formato español los ejes numéricos que siguen con el formato por defecto.
+    3. Si se indica `fuente`, la escribe bajo el gráfico.
+    4. Guarda el PNG en Graficos/ y muestra la figura.
+    """
+    if fig._suptitle is not None:
+        fig._suptitle.set(fontsize=16, fontweight="bold", color=BBVA["marino"])
+        for ax in fig.axes:
+            for posicion in ("left", "center", "right"):     # los títulos del estilo global van a la izquierda
+                if ax.get_title(loc=posicion):
+                    ax.set_title(ax.get_title(loc=posicion), loc=posicion, fontsize=13)
+        fig.tight_layout()
+    for ax in fig.axes:
+        for eje in (ax.xaxis, ax.yaxis):
+            if type(eje.get_major_formatter()) is ScalarFormatter:
+                numeros_es(eje)
+    if fuente:
+        anotar_fuente(fig, fuente)
+    ruta = guardar_mpl(fig, nombre)
+    plt.show()
     return ruta
 
 
