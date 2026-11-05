@@ -25,5 +25,9 @@ dependencies:
   - jupyter
   - ipykernel
   - nbconvert
-# Cuando se implementen Montecarlo, volatilidad o redes neuronales, añadir aquí
-# lo que haga falta (por ejemplo scipy, arch, pytorch).
+  # Fórmula cerrada de BBVA (scipy) y red neuronal (pytorch; scikit-learn para las métricas)
+  - scipy
+  - scikit-learn
+  - pytorch
+  # Volatilidad con modelos GARCH (librería arch; en conda-forge se llama arch-py)
+  - arch-py
