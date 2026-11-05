@@ -227,7 +227,7 @@ async function init(){
     let resize;window.addEventListener('resize',()=>{clearTimeout(resize);resize=setTimeout(navigate,160);});
     window.addEventListener('beforeprint',navigate);
     $('#export').addEventListener('click',download);
-  }catch(error){$('#load-status').setAttribute('role','alert');$('#load-status').textContent=`${error.message} Abre dashboard/index.html con Live Server y comprueba las carpetas datos/ y vendor/.`;}
+  }catch(error){$('#load-status').setAttribute('role','alert');$('#load-status').textContent=`${error.message} Abre Dashboard Cartera/index.html con Live Server y comprueba las carpetas datos/ y vendor/.`;}
 }
 $('#print').addEventListener('click',()=>window.print());
 ['#method-open','#method-footer'].forEach(id=>$(id).addEventListener('click',()=>$('#method-dialog').showModal()));
