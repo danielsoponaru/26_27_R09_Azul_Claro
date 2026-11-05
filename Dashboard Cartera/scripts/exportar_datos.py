@@ -17,7 +17,10 @@ assert not df.duplicated(['symbol', 'date']).any()
 assert df['close'].gt(0).all() and df[['date', 'symbol', 'close']].notna().all().all()
 prices = df.pivot(index='date', columns='symbol', values='close').sort_index()
 returns = np.log(prices / prices.shift(1)).dropna(how='all')
-notebook = json.loads((ROOT / '04_Seleccion_cartera.ipynb').read_text(encoding='utf-8'))
+notebook_path = ROOT / '04_Seleccion_cartera.ipynb'
+if not notebook_path.exists():
+    notebook_path = ROOT / 'seleccion_cartera.ipynb'
+notebook = json.loads(notebook_path.read_text(encoding='utf-8'))
 constants = {}
 for cell in notebook['cells']:
     if cell['cell_type'] != 'code':
