@@ -2,7 +2,7 @@
 
 Ruta en el repositorio: packages/montecarlo.py
 Entrada: ninguna. Los parámetros (sigma, rho) son los de outputs/parametros_montecarlo.json,
-calculados en seleccion_cartera.ipynb sobre Datos/Transformados/dowjones_diario_2016_2025.csv.
+calculados en 04_Seleccion_cartera.ipynb sobre Datos/Transformados/dowjones_diario_2016_2025.csv.
 Salida: arrays en memoria. Las exportaciones las hace el notebook o script que llama a estas funciones.
 
 Modelo: movimiento browniano geométrico correlacionado con Cholesky, en medida neutral al riesgo (mu = r).
