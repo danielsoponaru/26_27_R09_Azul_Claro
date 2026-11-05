@@ -12,7 +12,6 @@ Uso en el notebook (primera celda):
     configurar_graficos()
 
 Contenido:
-    FUENTE                texto de la fuente de datos común a todos los gráficos
     BBVA, PALETA          colores de la paleta y orden de uso cuando hay varias series
     CMAP_SECUENCIAL       escala continua para magnitudes (de gris a azul principal)
     CMAP_DIVERGENTE       escala centrada en 0 para correlaciones (marino - blanco - agua)
@@ -62,9 +61,6 @@ PALETA = [BBVA["principal"], BBVA["medio"], BBVA["cielo"], BBVA["agua"], BBVA["m
 CMAP_SECUENCIAL = LinearSegmentedColormap.from_list("bbva_secuencial", [BBVA["gris"], BBVA["principal"]])
 CMAP_DIVERGENTE = LinearSegmentedColormap.from_list(
     "bbva_divergente", [BBVA["marino"], BBVA["blanco"], BBVA["agua"]])
-
-# Fuente única de todos los gráficos: todo parte del dataset del Dow Jones ya limpiado (notebook 01)
-FUENTE = "elaboración propia a partir de los datos del Dow Jones (2016-2025) ya limpiados"
 
 MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
@@ -163,14 +159,8 @@ def fechas_es(ax):
     ax.xaxis.set_major_formatter(etiqueta)
 
 
-def anotar_fuente(fig, texto=None, nota=None):
-    """Escribe la fuente de los datos bajo el gráfico. Se llama después de `plt.tight_layout()`.
-
-    Sin argumentos usa la `FUENTE` común a todo el proyecto. `nota` añade una aclaración propia del
-    gráfico (por ejemplo, la semilla de una simulación) a continuación de la fuente."""
-    texto = texto or FUENTE
-    if nota:
-        texto = f"{texto}. {nota}"
+def anotar_fuente(fig, texto):
+    """Escribe la fuente de los datos bajo el gráfico. Se llama después de `plt.tight_layout()`."""
     fig.text(0.01, -0.01, f"Fuente: {texto}", ha="left", va="top", alpha=0.75)
 
 
@@ -223,13 +213,13 @@ def guardar_mpl(fig, nombre):
     return ruta
 
 
-def cerrar_grafico(fig, nombre, fuente=FUENTE):
+def cerrar_grafico(fig, nombre, fuente=None):
     """Último paso de un gráfico de matplotlib/seaborn: retoques, fuente, guardado y muestra.
 
     1. Si la figura tiene título general (`fig.suptitle`), lo pone a 16 pt en negrita y baja el de cada
        panel a 13 pt, porque a 16 pt (el tamaño global) no caben varios paneles en fila.
     2. Pasa a formato español los ejes numéricos que siguen con el formato por defecto.
-    3. Escribe la fuente bajo el gráfico (por defecto la común, `FUENTE`; con `fuente=None` no escribe nada).
+    3. Si se indica `fuente`, la escribe bajo el gráfico.
     4. Guarda el PNG en Graficos/ y muestra la figura.
     """
     if fig._suptitle is not None:
