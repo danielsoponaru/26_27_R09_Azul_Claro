@@ -74,7 +74,8 @@ outputs/*
 !outputs/parametros_montecarlo.json
 
 # ============================================
-# Archivos Markdown (no se suben)
+# Archivos Markdown (no se suben, salvo los README.md:
+# el general del repo y el de cada carpeta)
 # ============================================
 **/*.md
 !**/README.md
