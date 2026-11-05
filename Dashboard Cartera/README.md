@@ -12,7 +12,7 @@ Abre esta carpeta en VS Code y selecciona **Open with Live Server** sobre `index
 
 ## Datos y actualización
 
-`datos/proyecto.json` es una instantánea derivada de `Datos/Transformados/dowjones_diario_2016_2025.csv`: 64.557 filas, 26 empresas, del 04/01/2016 al 31/12/2025. El proceso de limpieza combina los CSV de Marketstack con Yahoo Finance según `Limpieza.ipynb`. La instantánea incluye una huella SHA-256 del CSV fuente, visible en Metodología.
+`datos/proyecto.json` es una instantánea derivada de `Datos/Transformados/dowjones_diario_2016_2025.csv`: 64.557 filas, 26 empresas, del 04/01/2016 al 31/12/2025. El proceso de limpieza combina los CSV de Marketstack con Yahoo Finance según `01_Limpieza_de_datos.ipynb`. La instantánea incluye una huella SHA-256 del CSV fuente, visible en Metodología.
 
 Para regenerarla desde la raíz del repositorio, con pandas y NumPy del entorno del proyecto:
 
