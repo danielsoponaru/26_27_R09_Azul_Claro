@@ -8,7 +8,8 @@ Selección de una cartera de 3 acciones del Dow Jones (CAT, MRK, MSFT), valoraci
 01_…10_*.ipynb       Notebooks, numerados en el orden en que se ejecutan
 packages/            Código común: estilo de los gráficos (bbva_graficos.py) y Monte Carlo (montecarlo.py)
 Datos/Originales/    Datos crudos (no se suben a Git)
-Datos/Transformados/ CSV limpio que generan los notebooks (no se sube a Git)
+Datos/Transformados/ Datos que generan los notebooks: CSV limpio, simulaciones de Monte Carlo y dataset de la red (no se suben a Git)
+modelos/             Red neuronal ya entrenada, red_payoff_final.pt (la genera el notebook 10; no se sube a Git)
 Graficos/            Gráficos PNG que generan los notebooks
 outputs/             Tablas y parámetros que generan los notebooks
 Dashboard Cartera/   Panel web (ver su README)
@@ -28,9 +29,13 @@ environment.yml      Entorno de Python
 | 07 | Predicción de volatilidad | Modelos GARCH |
 | 08 | Monte Carlo | Simulación de la cartera y prima del producto |
 | 09 | Monte Carlo para redes | Muestras de simulación para entrenar la red |
-| 10 | Mining | Red neuronal que predice el payoff (tarda mucho) |
+| 10 | Mining | Red neuronal (GRU) que predice el payoff; guarda `rnn_dataset.npz` y `red_payoff_final.pt` (tarda mucho) |
 
 Ejecútalos desde la raíz del repositorio. El 01 va primero (genera el CSV que usan todos los demás) y el 09 antes que el 10.
+
+## Qué incluye cada entrega
+
+Git ignora los datos y los archivos pesados (`Datos/`, `.npz`, `.pt`). Si recibes el repositorio en **zip**, ya vienen incluidos y generados. Si lo descargas de **GitHub**, no: los datos crudos se copian a mano (ver abajo) y el resto lo generan los notebooks.
 
 ## Datos crudos
 
